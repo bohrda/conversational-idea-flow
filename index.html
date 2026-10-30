@@ -1,0 +1,367 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Fluxo de ideias</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#F5F5F7; --ink:#17181C; --muted:#5E6170; --bar:#FFFFFF; --line:#E1E2E8;
+  --btn:#17181C; --btn-ink:#FFFFFF; --ghost:#ECEDF1; --warn:#B3261E;
+  color-scheme:light;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#121317; --ink:#EDEEF2; --muted:#9A9DAB; --bar:#1B1C22; --line:#2C2E37;
+    --btn:#EDEEF2; --btn-ink:#121317; --ghost:#262830; --warn:#F2B8B5; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#121317; --ink:#EDEEF2; --muted:#9A9DAB; --bar:#1B1C22; --line:#2C2E37;
+  --btn:#EDEEF2; --btn-ink:#121317; --ghost:#262830; --warn:#F2B8B5; color-scheme:dark;
+}
+*,*::before,*::after{box-sizing:inherit}
+html,body{height:100%;margin:0}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{
+  background:var(--bg); color:var(--ink);
+  font-family:"Bricolage Grotesque",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  display:flex; flex-direction:column; overflow:hidden;
+}
+
+/* Palco: cada voz ocupa área proporcional ao tempo de fala */
+#stage{flex:1; display:flex; min-height:0}
+@media (orientation:portrait){ #stage{flex-direction:column} }
+
+.panel{
+  flex:1 1 0; min-width:0; min-height:0;
+  container-type:size; position:relative; overflow:hidden;
+  display:flex; flex-direction:column; justify-content:flex-end;
+  padding:clamp(8px,5cqmin,32px);
+  transition:flex-grow .8s ease, filter .3s ease;
+  filter:saturate(.4) brightness(.9);
+}
+.panel.active{filter:none}
+body.paused .panel{filter:grayscale(.75) brightness(.85)}
+
+.name{
+  font-size:clamp(13px,9cqmin,52px); font-weight:600; line-height:1.1;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  display:flex; align-items:center; gap:.35em;
+}
+.panel.active .name::before{
+  content:""; flex:none; width:.45em; height:.45em; border-radius:50%;
+  background:currentColor; animation:pulse 1.4s ease-in-out infinite;
+}
+@keyframes pulse{50%{opacity:.25; transform:scale(.7)}}
+@media (prefers-reduced-motion:reduce){
+  .panel{transition:none}
+  .panel.active .name::before{animation:none}
+}
+.time{
+  font-size:clamp(18px,30cqmin,170px); font-weight:800; line-height:.92;
+  letter-spacing:-.03em; font-variant-numeric:tabular-nums;
+}
+.share{font-size:clamp(12px,7cqmin,34px); font-weight:400; opacity:.85; margin-top:.2em}
+
+/* Tela inicial */
+.empty{margin:auto; max-width:34rem; padding:24px; text-align:left}
+.empty h1{font-size:clamp(40px,9vw,88px); font-weight:800; line-height:.95; letter-spacing:-.03em; margin:0 0 .3em}
+.empty p{font-size:18px; line-height:1.5; color:var(--muted); margin:0 0 .8em}
+.empty p.error{color:var(--warn)}
+
+/* Barra inferior */
+#bar{
+  display:flex; flex-wrap:wrap; align-items:center; gap:10px 14px;
+  padding:12px 16px; background:var(--bar); border-top:1px solid var(--line);
+}
+button{
+  font:inherit; font-size:16px; font-weight:600; border:0; border-radius:999px;
+  padding:10px 18px; cursor:pointer; background:var(--ghost); color:var(--ink);
+}
+button.primary{background:var(--btn); color:var(--btn-ink)}
+button:disabled{opacity:.4; cursor:default}
+button:focus-visible, input:focus-visible{outline:3px solid var(--ink); outline-offset:2px}
+#meter{width:56px; height:6px; border-radius:3px; background:var(--ghost); overflow:hidden}
+#meter i{display:block; height:100%; width:0; background:var(--ink); transition:width .1s linear}
+#sens{display:flex; align-items:center; gap:8px; color:var(--muted); font-size:15px}
+#sens input{accent-color:var(--ink); width:110px}
+#stats{margin-left:auto; display:flex; align-items:baseline; gap:8px; color:var(--muted); font-size:15px}
+#eq{font-size:24px; font-weight:800; color:var(--ink); font-variant-numeric:tabular-nums}
+</style>
+</head>
+<body>
+<main id="stage">
+  <div class="empty" id="empty">
+    <h1>Fluxo de ideias</h1>
+    <p id="msg">Toque em <b>Ouvir</b> e deixe o aparelho no centro da mesa. Cada voz nova ganha uma cor, e a área de cada cor cresce com o tempo de fala.</p>
+    <p>Se duas pessoas ficarem na mesma cor, aumente a sensibilidade. Se uma pessoa se dividir em duas cores, diminua.</p>
+  </div>
+</main>
+<nav id="bar">
+  <button class="primary" id="listen">Ouvir</button>
+  <div id="meter" aria-hidden="true"><i></i></div>
+  <button id="reset" disabled>Reiniciar</button>
+  <label id="sens" title="Mais sensível separa vozes parecidas; menos sensível junta vozes que variam">
+    Sensibilidade <input type="range" id="sensInput" min="1" max="9" step="1" value="5">
+  </label>
+  <div id="stats" title="100% = todos falaram o mesmo tempo">
+    <span>Equilíbrio</span><span id="eq">—</span>
+  </div>
+</nav>
+
+<script>
+const PALETTE = [
+  ["#2F55E4","#FFFFFF"], ["#F2B705","#1A1A1A"], ["#E0405E","#FFFFFF"], ["#14A37F","#FFFFFF"],
+  ["#8B5CF6","#FFFFFF"], ["#FF7A1A","#1A1A1A"], ["#0E9FB0","#FFFFFF"], ["#6B4F3A","#FFFFFF"]
+];
+const MAX_SPEAKERS = 12;
+const WINDOW_MS = 1000;   // cada janela de 1 s é atribuída a uma voz
+const NBANDS = 12;
+
+const stage = document.getElementById("stage");
+const emptyEl = document.getElementById("empty");
+const msgEl = document.getElementById("msg");
+const listenBtn = document.getElementById("listen");
+const resetBtn = document.getElementById("reset");
+const sensInput = document.getElementById("sensInput");
+const meterEl = document.querySelector("#meter i");
+const eqEl = document.getElementById("eq");
+
+let analyser, timeBuf, freqBuf, sr, bandBins;
+let listening = false, paused = false;
+let floorDb = null;
+let win = null;
+let speakers = [];   // {ms, c (centroide), n, el, timeEl, shareEl}
+let current = -1;
+let pending = null;  // voz possivelmente nova, aguardando confirmação
+
+const threshold = () => 2.8 - 0.2 * Number(sensInput.value);
+
+/* ---------- Áudio ---------- */
+async function start(){
+  if (!navigator.mediaDevices?.getUserMedia) return fail();
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio:{ echoCancellation:false, noiseSuppression:true, autoGainControl:false }
+    });
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    await ctx.resume();
+    sr = ctx.sampleRate;
+    analyser = ctx.createAnalyser();
+    analyser.fftSize = 2048;
+    analyser.smoothingTimeConstant = 0;
+    ctx.createMediaStreamSource(stream).connect(analyser);
+    timeBuf = new Float32Array(analyser.fftSize);
+    freqBuf = new Float32Array(analyser.frequencyBinCount);
+    // 12 faixas em escala logarítmica entre 150 Hz e 4 kHz
+    const hz = sr / analyser.fftSize;
+    bandBins = Array.from({length:NBANDS}, (_,b) => {
+      const lo = 150 * Math.pow(4000/150, b/NBANDS), hi = 150 * Math.pow(4000/150, (b+1)/NBANDS);
+      return [Math.floor(lo/hz), Math.max(Math.floor(lo/hz)+1, Math.floor(hi/hz))];
+    });
+    win = newWindow(performance.now());
+    listening = true;
+    msgEl.textContent = "Ouvindo. A primeira voz aparece aqui assim que alguém falar.";
+    msgEl.classList.remove("error");
+    setInterval(frame, 50);
+    syncControls();
+  } catch (e) { fail(); }
+}
+
+function fail(){
+  msgEl.textContent = "Não foi possível acessar o microfone. Libere a permissão de microfone para esta página no navegador e toque em Ouvir de novo.";
+  msgEl.classList.add("error");
+}
+
+function newWindow(t){ return { start:t, frames:0, speech:0, pitches:[], bands:new Float64Array(NBANDS) }; }
+
+// Analisa ~43 ms de áudio a cada 50 ms
+function frame(){
+  analyser.getFloatTimeDomainData(timeBuf);
+  let s = 0;
+  for (let i = 0; i < timeBuf.length; i++) s += timeBuf[i]*timeBuf[i];
+  const db = 10*Math.log10(s/timeBuf.length + 1e-12);
+  // Ruído de fundo: acompanha o mínimo e sobe devagar
+  floorDb = floorDb === null ? db : Math.min(db, floorDb + 0.02);
+  const above = db - floorDb;
+  meterEl.style.width = `${Math.min(100, Math.max(0, above*2.5))}%`;
+
+  win.frames++;
+  if (above > 10 && db > -65) {
+    win.speech++;
+    const f0 = pitch(timeBuf);
+    if (f0) win.pitches.push(f0);
+    analyser.getFloatFrequencyData(freqBuf);
+    bandBins.forEach(([a,b], k) => {
+      for (let i = a; i < b; i++) win.bands[k] += Math.pow(10, freqBuf[i]/10);
+    });
+  }
+  const now = performance.now();
+  if (now - win.start >= WINDOW_MS) closeWindow(now);
+}
+
+// Frequência fundamental por autocorrelação normalizada (70–400 Hz)
+function pitch(buf){
+  const minLag = Math.floor(sr/400), maxLag = Math.floor(sr/70);
+  const M = buf.length - maxLag;
+  if (M <= 0) return 0;
+  let e0 = 0, eL = 0;
+  for (let i = 0; i < M; i++) e0 += buf[i]*buf[i];
+  for (let i = minLag; i < minLag + M; i++) eL += buf[i]*buf[i];
+  const r = new Float32Array(maxLag + 1);
+  let best = 0;
+  for (let lag = minLag; lag <= maxLag; lag++) {
+    let acc = 0;
+    for (let i = 0; i < M; i++) acc += buf[i]*buf[i+lag];
+    r[lag] = acc / Math.sqrt(e0*eL + 1e-12);
+    if (r[lag] > best) best = r[lag];
+    eL += buf[lag+M]*buf[lag+M] - buf[lag]*buf[lag];
+  }
+  if (best < 0.5) return 0;
+  // primeiro pico forte, para evitar erro de oitava
+  for (let lag = minLag + 1; lag < maxLag; lag++) {
+    if (r[lag] >= 0.85*best && r[lag] >= r[lag-1] && r[lag] >= r[lag+1]) return sr/lag;
+  }
+  return 0;
+}
+
+/* ---------- Identificação de vozes ---------- */
+function features(w){
+  const p = [...w.pitches].sort((a,b) => a-b)[w.pitches.length >> 1];
+  const v = new Float64Array(NBANDS + 1);
+  v[0] = 12*Math.log2(p/100) / 4;                 // tom de voz (semitons)
+  const dbs = Array.from(w.bands, x => 10*Math.log10(x/w.speech + 1e-12));
+  const mean = dbs.reduce((a,b) => a+b, 0) / NBANDS;
+  dbs.forEach((d,i) => v[i+1] = (d - mean) / 20); // timbre (formato do espectro)
+  return v;
+}
+const dist = (a,b) => Math.sqrt(a.reduce((s,x,i) => s + (x-b[i])**2, 0));
+
+function nearest(v){
+  let best = -1, bd = Infinity;
+  speakers.forEach((s,i) => { const d = dist(v, s.c); if (d < bd) { bd = d; best = i; } });
+  return [best, bd];
+}
+
+function credit(i, v, ms){
+  const s = speakers[i];
+  s.ms += ms;
+  if (v) { s.n = Math.min(s.n + 1, 20); s.c = s.c.map((x,k) => x + (v[k]-x)/s.n); }
+}
+
+function resolvePending(){
+  if (!pending) return;
+  credit(nearest(pending.v)[0], null, pending.ms);
+  pending = null;
+}
+
+function closeWindow(now){
+  const frac = win.frames ? win.speech / win.frames : 0;
+  const ms = frac * (now - win.start);
+  const isSpeech = win.speech >= 3 && frac >= 0.2 && win.pitches.length >= 3;
+
+  if (paused || !isSpeech) {
+    current = -1;
+    if (!paused) resolvePending(); else pending = null;
+  } else {
+    assign(features(win), ms);
+  }
+  win = newWindow(now);
+  render();
+}
+
+function assign(v, ms){
+  if (!speakers.length) { create(v, ms); return; }
+  const [best, bd] = nearest(v);
+  if (bd <= threshold() || speakers.length >= MAX_SPEAKERS) {
+    resolvePending();
+    credit(best, v, ms);
+    current = best;
+    return;
+  }
+  // Voz diferente de todas: só vira participante se repetir na janela seguinte
+  if (pending && dist(pending.v, v) <= threshold()) {
+    const avg = v.map((x,k) => (x + pending.v[k]) / 2);
+    const total = ms + pending.ms;
+    pending = null;
+    create(avg, total);
+    return;
+  }
+  resolvePending();
+  pending = { v, ms };
+}
+
+function create(v, ms){
+  const i = speakers.length;
+  const [bg, fg] = PALETTE[i % PALETTE.length];
+  const el = document.createElement("div");
+  el.className = "panel";
+  el.style.background = bg;
+  el.style.color = fg;
+  el.innerHTML = `<div class="name">Pessoa ${i+1}</div><div class="time"></div><div class="share"></div>`;
+  if (!speakers.length) emptyEl.remove();
+  stage.appendChild(el);
+  speakers.push({ ms, c:v, n:1, el, timeEl:el.querySelector(".time"), shareEl:el.querySelector(".share") });
+  current = i;
+  syncControls();
+}
+
+/* ---------- Tela ---------- */
+function fmt(ms){
+  const s = Math.floor(ms/1000), h = Math.floor(s/3600), m = Math.floor(s%3600/60), r = s%60;
+  const pad = n => String(n).padStart(2,"0");
+  return h ? `${h}:${pad(m)}:${pad(r)}` : `${pad(m)}:${pad(r)}`;
+}
+
+function render(){
+  const total = speakers.reduce((a,s) => a + s.ms, 0);
+  speakers.forEach((s,i) => {
+    s.el.style.flexGrow = Math.max(s.ms, total*0.05, 1);
+    s.timeEl.textContent = fmt(s.ms);
+    s.shareEl.textContent = `${Math.round(total ? s.ms/total*100 : 0)}%`;
+    s.el.classList.toggle("active", i === current);
+  });
+  // Equilíbrio = entropia normalizada das fatias de tempo (100% = distribuição igual)
+  const n = speakers.length;
+  if (n < 2 || !total) { eqEl.textContent = "—"; return; }
+  const H = speakers.reduce((a,s) => { const p = s.ms/total; return p > 0 ? a - p*Math.log(p) : a; }, 0);
+  eqEl.textContent = `${Math.round(H/Math.log(n)*100)}%`;
+}
+
+function syncControls(){
+  listenBtn.textContent = !listening ? "Ouvir" : paused ? "Retomar" : "Pausar";
+  resetBtn.disabled = !speakers.length;
+  document.body.classList.toggle("paused", paused);
+}
+
+listenBtn.addEventListener("click", () => {
+  if (!listening) { start(); return; }
+  paused = !paused;
+  syncControls();
+});
+
+// Reiniciar pede um segundo toque para confirmar
+let resetArmed = null;
+resetBtn.addEventListener("click", () => {
+  if (!resetArmed) {
+    resetBtn.textContent = "Toque de novo para zerar";
+    resetArmed = setTimeout(() => { resetArmed = null; resetBtn.textContent = "Reiniciar"; }, 3000);
+    return;
+  }
+  clearTimeout(resetArmed); resetArmed = null;
+  resetBtn.textContent = "Reiniciar";
+  speakers = []; current = -1; pending = null;
+  stage.replaceChildren(emptyEl);
+  syncControls();
+  render();
+});
+</script>
+</body>
+</html>
